@@ -1,0 +1,18 @@
+Source: pcsensor
+Section: utils
+Priority: extra
+Maintainer: Jan Wagner <waja@cyconet.org>
+Build-Depends: debhelper (>= 8.0.0), libusb-dev, udev
+Standards-Version: 3.9.5
+Homepage: http://blog.osakana.net/archives/3785
+
+Package: pcsensor
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Program to read temperature from a TEMPer USB device (0c45:7401)
+ Hid TEMPer thermometer is a measurement device using USB port to connect to a
+ computer or other machines. It can measure the temperature of the machine and
+ the environment accurately. It must be connect to the computer to start
+ working. Hid TEMPer can be used in computer room, weather, environment and
+ special environment temperature testing. The homepage for this product is
+ http://www.pcsensor.com/index.php?_a=viewProd&productId=6

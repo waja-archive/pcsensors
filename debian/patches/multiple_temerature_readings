@@ -1,0 +1,172 @@
+Description: support for multiple temperature readings (-n [1..2] option)
+ Adapted 76db0855cca937e2bd691c5e1d1af7d81889e508 of
+ https://github.com/jeroensteenhuis/pcsensor
+Author: Jan Wagner <waja@cyconet.org>
+Last-Update: 2014-07-10
+
+--- pcsensor-1.0.2.orig/pcsensor.c
++++ pcsensor-1.0.2/pcsensor.c
+@@ -267,15 +267,22 @@ void interrupt_read(usb_dev_handle *dev)
+     }
+ }
+ 
+-void interrupt_read_temperatura(usb_dev_handle *dev, float *tempC) {
++void interrupt_read_temperature(usb_dev_handle *dev, float *tempC) {
+  
+-    int r,i, temperature;
++    int r,i,j, temperature[2];
+     unsigned char answer[reqIntLen];
+     bzero(answer, reqIntLen);
+     
+     r = usb_interrupt_read(dev, 0x82, answer, reqIntLen, timeout);
++
++    // If reading failed, retry once more...
+     if( r != reqIntLen )
+     {
++      r = usb_interrupt_read(dev, 0x82, answer, reqIntLen, timeout);
++    }
++
++   if( r != reqIntLen )
++    {
+           perror("USB interrupt read"); bad("USB read failed"); 
+     }
+ 
+@@ -286,9 +293,13 @@ void interrupt_read_temperature(usb_dev_
+       printf("\n");
+     }
+     
+-    temperature = (answer[3] & 0xFF) + ((signed char)answer[2] << 8);
+-    temperature += calibration;
+-    *tempC = temperature * (125.0 / 32000.0);
++    temperature[0] = (answer[3] & 0xFF) + ((signed char)answer[2] << 8);
++    temperature[0] += calibration;
++    tempC[0] = temperature[0] * (125.0 / 32000.0);
++
++    temperature[1] = (answer[5] & 0xFF) + ((signed char)answer[4] << 8);
++    temperature[1] += calibration;
++    tempC[1] = temperature[1] * (125.0 / 32000.0);
+ 
+ }
+ 
+@@ -325,13 +336,14 @@ void ex_program(int sig) {
+  
+ int main( int argc, char **argv) {
+  
+-     float tempc;
+-     int c, i;
++     float tempc[2];
++     int c, i, j;
+      struct tm *local;
+      time_t t;
++     int nr_of_sensors = 1;
+ 
+      memset(handles, 0, sizeof(handles));
+-     while ((c = getopt (argc, argv, "mfcvhl::a:dD::")) != -1)
++     while ((c = getopt (argc, argv, "mfcvhl::a:dD::n:")) != -1)
+      switch (c)
+        {
+        case 'v':
+@@ -380,6 +392,20 @@ int main( int argc, char **argv) {
+          } else {           
+               break;
+          }
++       case 'n':
++         if (!sscanf(optarg,"%j",&nr_of_sensors)==1) {
++             fprintf (stderr, "Error: '%s' is not numeric.\n", optarg);
++             exit(EXIT_FAILURE);
++         } 
++         else 
++         {           
++           if ((nr_of_sensors > 2) || (nr_of_sensors < 1))
++           {
++             fprintf (stderr, "Error: '%s' is not in range [1..2].\n", optarg);
++             exit(EXIT_FAILURE);
++           }
++              break;
++         }
+        case '?':
+        case 'h':
+          printf("pcsensor version %s\n",VERSION);
+@@ -391,6 +417,7 @@ int main( int argc, char **argv) {
+ 	 printf("          -f output only in Fahrenheit\n");
+ 	 printf("          -a[n] increase or decrease temperature in 'n' degrees for device calibration\n");
+ 	 printf("          -m output for mrtg integration\n");
++	 printf("	   -n[n] read number of sensors [1..2]\n");
+ 	 printf("          -d output with Bus and Device number\n");
+ 	 printf("          -D display device list\n");
+ 	 printf("          -D[n] specific device number\n");
+@@ -434,17 +461,23 @@ int main( int argc, char **argv) {
+ 	 interrupt_read(handles[i]);
+ 
+ 	 control_transfer(handles[i], uTemperatura );
+-	 interrupt_read_temperatura(handles[i], &tempc);
++	 interrupt_read_temperature(handles[i], tempc);
+ 
+ 	 t = time(NULL);
+ 	 local = localtime(&t);
+ 	 if (mrtg) {
+ 	   if (formato>=10) {
+-	     printf("%.2f\n", (9.0 / 5.0 * tempc + 32.0));
+-	     printf("%.2f\n", (9.0 / 5.0 * tempc + 32.0));
++	     for (j=0;j<nr_of_sensors; j++)
++	     {
++		printf("%.2f\n", (9.0 / 5.0 * tempc[j] + 32.0));
++		printf("%.2f\n", (9.0 / 5.0 * tempc[j] + 32.0));
++	     }
+ 	   } else {
+-	     printf("%.2f\n", tempc);
+-	     printf("%.2f\n", tempc);
++	     for (j=0;j<nr_of_sensors; j++)
++	     {
++		printf("%.2f\n", tempc[j]);
++		printf("%.2f\n", tempc[j]);
++	     }
+ 	   }
+          
+ 	   printf("%02d:%02d\n", 
+@@ -453,25 +486,28 @@ int main( int argc, char **argv) {
+ 	 
+ 	   printf("pcsensor\n");
+ 	 } else {
+-	   printf("%04d/%02d/%02d %02d:%02d:%02d ", 
+-		  local->tm_year +1900, 
+-		  local->tm_mon + 1, 
+-		  local->tm_mday,
+-		  local->tm_hour,
+-		  local->tm_min,
+-		  local->tm_sec);
++	    for (j=0;j<nr_of_sensors; j++)
++	    {
++	      printf("%04d/%02d/%02d %02d:%02d:%02d ", 
++			  local->tm_year +1900, 
++			  local->tm_mon + 1, 
++			  local->tm_mday,
++			  local->tm_hour,
++			  local->tm_min,
++			  local->tm_sec);
+ 	   
+-	   if(devlist>0){
+-	     printf("Bus %s Device %s ",devlist_bus[i],devlist_device[i]);
+-	   }
+-	   printf("Temperature");
+-	   if (formato>=10 || formato==0) {
+-	     printf(" %.2fF", (9.0 / 5.0 * tempc + 32.0));
+-	   }
+-	   if ((formato%10)==1 || formato==0) {
+-	     printf(" %.2fC", tempc);
++	     if(devlist>0){
++	       printf("Bus %s Device %s ",devlist_bus[i],devlist_device[i]);
++	     }
++	     printf("Temperature%d", j);
++	     if (formato>=10 || formato==0) {
++	       printf(" %.2fF", (9.0 / 5.0 * tempc[j] + 32.0));
++	     }
++	     if ((formato%10)==1 || formato==0) {
++	       printf(" %.2fC", tempc[j]);
++	     }
++	     printf("\n");
+ 	   }
+-	   printf("\n");
+ 	 }
+ 
+ 	 usb_release_interface(handles[i], INTERFACE1);

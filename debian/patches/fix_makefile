@@ -1,0 +1,36 @@
+Description: Fixing the Makefile
+Forwarded: not-needed
+Author: Jan Wagner <waja@cyconet.org>
+Last-Update: 2014-07-10
+
+--- pcsensor-1.0.2.orig/Makefile
++++ pcsensor-1.0.2/Makefile
+@@ -1,12 +1,22 @@
+-all:	pcsensor
+-
+ CFLAGS = -O2 -Wall
++CC = gcc
++
++TARGET = pcsensor
++PREFIX = /usr
++BINDIR = $(PREFIX)/bin
+ 
+-pcsensor:	pcsensor.c
++all:	${TARGET}
++
++${TARGET}:	pcsensor.c
+ 	${CC} -DUNIT_TEST -o $@ $^ -lusb
+ 
+ clean:		
+-	rm -f pcsensor *.o
++	rm -f ${TARGET} *.o
++
++install: 		# must be root to do this
++	install -D -m 0755 ${TARGET} $(DESTDIR)${BINDIR}/${TARGET}
++	install -D -m 0644 99-tempsensor.rules ${DESTDIR}/lib/udev/rules.d/99-tempsensor.rules
+ 
+-rules-install:			# must be superuser to do this
+-	cp 99-tempsensor.rules /etc/udev/rules.d
++uninstall:
++	rm -f ${BINDIR}/${TARGET}
++	rm -f /lib/udev/rules.d/99-tempsensor.rules
